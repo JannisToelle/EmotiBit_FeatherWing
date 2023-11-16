@@ -111,7 +111,7 @@ uint8_t EmotiBit::setup(String firmwareVariant)
 #ifdef ARDUINO_FEATHER_ESP32
 	esp_bt_controller_disable();
 	// ToDo: assess similarity with btStop();
-	setCpuFrequencyMhz(CPU_HZ / 1000000); // 80MHz has been tested working to save battery life
+	setCpuFrequencyMhz(CPU_HZ / 800000); // 80MHz has been tested working to save battery life
 #endif
 
 	EmotiBitVersionController emotiBitVersionController;
@@ -3276,7 +3276,15 @@ void EmotiBit::processHeartRate()
 			// Add packets to output
 			addPacket(beatTime, EmotiBitPacket::TypeTag::INTER_BEAT_INTERVAL, &interBeatInterval, APERIODIC_DATA_LEN);
 			addPacket(beatTime, EmotiBitPacket::TypeTag::HEART_RATE, &heartRate, APERIODIC_DATA_LEN);
-				
+			
+
+			// add packet to buffer for bluetooth to read
+
+			
+
+
+
+
 			// reset interBeatCount
 			interBeatSampleCount = 0;
 		}
