@@ -2,16 +2,19 @@
 
 #define BLE_UPDATE_INTERVAL 3000
 
-// BLE Battery Service
+BLEService heartRateService("180D");
+// BLECharacteristic()
+BLEUnsignedIntCharacteristic heartRateChar("2A37", BLERead | BLENotify);
+
 BLEService batteryService("180F");
 BLEUnsignedCharCharacteristic batteryLevelChar("2A19", BLERead | BLENotify);
 
 long previousMillis = 0; // last time data was sent over ble
 bool wasConnected = false;
-int oldBatteryLevel = 0;
 
-void EmotibitBluetooth::setup()
+void EmotibitBluetooth::setup(String deviceName, String pairingCode)
 {
+    // ignore pairing code for now
 
     // begin initialization
     if (!BLE.begin())
@@ -19,16 +22,11 @@ void EmotibitBluetooth::setup()
         Serial.println("starting BLE failed!");
     }
 
-    /* Set a local name for the Bluetooth® Low Energy device
-       This name will appear in advertising packets
-       and can be used by remote devices to identify this Bluetooth® Low Energy device
-       The name can be changed but maybe be truncated based on space left in advertisement packet
-    */
-    BLE.setLocalName("BatteryMonitor");
-    BLE.setAdvertisedService(batteryService);           // add the service UUID
-    batteryService.addCharacteristic(batteryLevelChar); // add the battery level characteristic
-    BLE.addService(batteryService);                     // Add the battery service
-    // batteryLevelChar.writeValue(0);       // set initial value for this characteristic
+    BLE.setLocalName(deviceName.c_str());
+    BLE.setAdvertisedService(heartRateService);
+
+    initBuffers();
+    initServices();
 
     /* Start advertising Bluetooth® Low Energy.  It will start continuously transmitting Bluetooth® Low Energy
        advertising packets and will be visible to remote Bluetooth® Low Energy central devices
@@ -40,7 +38,34 @@ void EmotibitBluetooth::setup()
     Serial.println("Bluetooth® device active, waiting for connections...");
 }
 
-void EmotibitBluetooth::update()
+void EmotibitBluetooth::initServices()
+{
+    heartRateService.addCharacteristic(heartRateChar);
+    BLE.addService(heartRateService);
+
+    batteryService.addCharacteristic(batteryLevelChar);
+    BLE.addService(batteryService);
+}
+
+void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
+{
+    batteryBuffer[0] = (uint8_t)batteryLevel;
+}
+
+void EmotibitBluetooth::updateHeartRate(float heartRate)
+{
+    heartRateBuffer[0] = (uint8_t)heartRate;
+}
+
+void EmotibitBluetooth::initBuffers()
+{
+    batteryBuffer[0] = 0;
+    batteryBuffer[1] = 0;
+    heartRateBuffer[0] = 0;
+    heartRateBuffer[1] = 0;
+}
+
+void EmotibitBluetooth::sendData()
 {
     // wait for a BLE central
     BLEDevice central = BLE.central();
@@ -60,8 +85,28 @@ void EmotibitBluetooth::update()
         if (currentMillis - previousMillis >= BLE_UPDATE_INTERVAL)
         {
             previousMillis = currentMillis;
-            updateBatteryLevel();
-            updateHeartRate();
+
+            batteryLevelChar.writeValue(batteryBuffer[0]);
+            heartRateChar.writeValue(115);
+
+            size_t timestamp = millis();
+            Serial.print("timestamp: ");
+            Serial.println(timestamp);
+            Serial.print("sending battery percentage: ");
+            Serial.println(batteryBuffer[0]);
+            Serial.print("sending heart rate: ");
+            Serial.println(heartRateBuffer[0]);
+
+            // if (batteryBuffer[0] != batteryBuffer[1])
+            // {
+            //     batteryLevelChar.writeValue(batteryBuffer[0]);
+            //     batteryBuffer[1] = batteryBuffer[0];
+            // }
+            // if (heartRateBuffer[0] != heartRateBuffer[1])
+            // {
+            //     heartRateChar.writeValue(heartRateBuffer[0]);
+            //     heartRateBuffer[1] = heartRateBuffer[0];
+            // }
         }
     }
     else if (wasConnected)
@@ -69,49 +114,5 @@ void EmotibitBluetooth::update()
         wasConnected = false;
         Serial.print("Disconnected from central: ");
         Serial.println(central.address());
-    }
-}
-
-void EmotibitBluetooth::updateBatteryLevel()
-{
-
-    float *data;
-    uint16_t dataSize;
-    uint32_t timestamp;
-    dataSize = m_emotibit->getData(EmotiBit::DataType::BATTERY_PERCENT, &data);
-
-    // Serial.println(timestamp);
-    Serial.println(dataSize);
-    if (dataSize == 1)
-    {
-        int batteryLevel = data[0];
-        if (batteryLevel != oldBatteryLevel)
-        {
-            Serial.print("Battery Level % is now: ");
-            Serial.println(batteryLevel);
-            batteryLevelChar.writeValue(batteryLevel);
-            oldBatteryLevel = batteryLevel;
-        }
-    }
-}
-
-void EmotibitBluetooth::updateHeartRate()
-{
-    float *buffer;
-    // uint32_t timestamp;
-    size_t dataSize = m_emotibit->getData(EmotiBit::DataType::BATTERY_PERCENT, &buffer);
-
-    // Serial.println(timestamp);
-    Serial.println(dataSize);
-    if (dataSize == 1)
-    {
-        int batteryLevel = buffer[0];
-        if (batteryLevel != oldBatteryLevel)
-        {
-            Serial.print("Battery Level % is now: ");
-            Serial.println(batteryLevel);
-            batteryLevelChar.writeValue(batteryLevel);
-            oldBatteryLevel = batteryLevel;
-        }
     }
 }

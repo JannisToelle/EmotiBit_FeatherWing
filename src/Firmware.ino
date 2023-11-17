@@ -1,12 +1,10 @@
 #include <Arduino.h>
 #include "EmotiBit.h"
-#include "EmotibitBluetooth.h"
 
 #define SerialUSB SERIAL_PORT_USBVIRTUAL // Required to work in Visual Micro / Visual Studio IDE
 const uint32_t SERIAL_BAUD = 115200;
 
 EmotiBit emotibit;
-EmotibitBluetooth bluetooth(&emotibit);
 const size_t dataSize = EmotiBit::MAX_DATA_BUFFER_SIZE;
 float data[dataSize];
 
@@ -45,7 +43,6 @@ void setup()
 		inoFilename = inoFilename.substring((inoFilename.lastIndexOf("\\")) + 1,(inoFilename.indexOf(".")));
 	}
 	emotibit.setup(inoFilename);
-	bluetooth.setup();
 
 	// Attach callback functions
 	emotibit.attachShortButtonPress(&onShortButtonPress);
@@ -55,7 +52,6 @@ void setup()
 void loop()
 {
 	emotibit.update();
-	bluetooth.update();
 
 	size_t dataAvailable = emotibit.readData(EmotiBit::DataType::PPG_GREEN, &data[0], dataSize);
 	if (dataAvailable > 0)

@@ -17,6 +17,7 @@
 #include "DoubleBufferFloat.h"
 #include <ArduinoJson.h>
 #include "EmotiBitWiFi.h"
+#include "EmotibitBluetooth.h"
 #include <SPI.h>
 #ifdef ARDUINO_FEATHER_ESP32
 #include <SD.h>
@@ -402,6 +403,7 @@ public:
 	volatile uint16_t BattLedDuration = 65535;
 
 	EmotiBitWiFi _emotiBitWiFi; 
+	EmotibitBluetooth emotibitBluetooth;
 	TwoWire* _EmotiBit_i2c = nullptr;
 #ifdef ARDUINO_FEATHER_ESP32
 	uint32_t i2cClkMain = 433000;	// Adjust for empirically slow I2C clock

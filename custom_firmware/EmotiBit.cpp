@@ -2404,6 +2404,7 @@ int8_t EmotiBit::updateBatteryPercentData(float battPcent) {
 		batteryPercent.push_back(average(batteryPercentBuffer));
 		batteryPercentBuffer.clear();
 	}
+	emotibitBluetooth.updateBatteryLevel(battPcent);
 	// ToDo: implement logic to determine return val
 	return 0;
 }
@@ -3277,14 +3278,7 @@ void EmotiBit::processHeartRate()
 			addPacket(beatTime, EmotiBitPacket::TypeTag::INTER_BEAT_INTERVAL, &interBeatInterval, APERIODIC_DATA_LEN);
 			addPacket(beatTime, EmotiBitPacket::TypeTag::HEART_RATE, &heartRate, APERIODIC_DATA_LEN);
 			
-
-			// add packet to buffer for bluetooth to read
-
-			
-
-
-
-
+			emotibitBluetooth.updateHeartRate(heartRate);
 			// reset interBeatCount
 			interBeatSampleCount = 0;
 		}
@@ -3388,6 +3382,8 @@ void EmotiBit::sendData()
 		writeSdCardMessage(_outDataPackets);
 		_outDataPackets = "";
 	}
+	emotibitBluetooth.sendData();
+
 }
 
 #ifdef ADAFRUIT_FEATHER_M0
@@ -3551,6 +3547,14 @@ bool EmotiBit::loadConfigFile(const String &filename) {
 
 	}
 	_emotiBitWiFi.setDeviceId(emotibitDeviceId);
+
+	if (jsonDoc.containsKey("BluetoothCredentials")) {
+		String deviceName = jsonDoc["BluetoothCredentials"]["deviceName"] | "Emotibit Bluetooth";
+		String pairingCode = jsonDoc["BluetoothCredentials"]["pairingCode"] | "";
+		emotibitBluetooth.setup(deviceName, pairingCode);
+	} else {
+		Serial.println("To use bluetooth please add exactly 1 set of bluetooth credentials");
+	}
 
 	//strlcpy(config.hostname,                   // <- destination
 	//	root["hostname"] | "example.com",  // <- source

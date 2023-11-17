@@ -2,21 +2,19 @@
 
 #include <SPI.h>
 #include <ArduinoBLE.h>
-#include "EmotiBit.h"
 
 class EmotibitBluetooth
 {
 private:
-    EmotiBit *m_emotibit;
+    // index 0 holds current value, index 1 hold previous value
+    uint8_t batteryBuffer[2];
+    uint8_t heartRateBuffer[2];
+    void initBuffers();
 
 public:
-    EmotibitBluetooth(EmotiBit *emotibit)
-    {
-        m_emotibit = emotibit;
-    }
-
-    void setup();
-    void update();
-    void updateBatteryLevel();
-    void updateHeartRate();
+    void setup(String deviceName, String pairingCode);
+    void initServices();
+    void sendData();
+    void updateBatteryLevel(float batteryLevel);
+    void updateHeartRate(float heartRate);
 };
