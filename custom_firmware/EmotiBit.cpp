@@ -966,7 +966,7 @@ uint8_t EmotiBit::setup(String firmwareVariant)
 	if (_emotiBitWiFi.status(false) != WL_CONNECTED)
 	{ 
 		// Could not connect to network. software restart and begin setup again.
-		restartMcu();
+		// restartMcu();
 	}
 	led.setLED(uint8_t(EmotiBit::Led::BLUE), false);
 	led.send();
@@ -1466,60 +1466,11 @@ void EmotiBit::parseIncomingControlPackets(String &controlPackets, uint16_t &pac
 		{
 			if (header.typeTag.equals(EmotiBitPacket::TypeTag::RECORD_BEGIN)) 
 			{
-#ifdef ADAFRUIT_FEATHER_M0
-				stopTimer();	// stop the data sampling timer
-#endif
 				String datetimeString = packet.substring(dataStartChar, packet.length());
-				// Write the configuration info to json file
-#if defined(ARDUINO_FEATHER_ESP32)
-				String infoFilename = "/" + datetimeString + "_info.json";
-#else
-				String infoFilename = datetimeString + "_info.json";
-#endif
-				_dataFile = SD.open(infoFilename, FILE_WRITE);
-				if (_dataFile) {
-					if (!printConfigInfo(_dataFile, datetimeString)) {
-						Serial.println(F("Failed to write to info file"));
-					}
-					_dataFile.close();
-				}
-				Serial.println("Creating new file to write data");
-				// Try to open the data file to be sure we can write
-				_sdCardFilename = datetimeString + ".csv";
-				uint32_t start_timeOpenFile = millis();
-#if defined ARDUINO_FEATHER_ESP32
-				_dataFile = SD.open("/" + _sdCardFilename, FILE_WRITE);
-#else 
-				_dataFile = SD.open(_sdCardFilename, O_CREAT | O_WRITE | O_AT_END);
-#endif
-				if (_dataFile) {
-					// Clear the data buffers before writing to file to avoid mismatches
-					processData();
-					sendData();
-					processData();
-					sendData();
-					_sdWrite = true;
-					Serial.print("** Recording Begin: ");
-					Serial.print(_sdCardFilename);
-					Serial.println(" **");
-					// ToDo: need to communicate back to Visualizer if we were able to open a file
-				}
-				else {
-					Serial.println("Failed to open data file for writing");
-				}
-				if (!_sendTestData)
-				{
-#ifdef ADAFRUIT_FEATHER_M0
-					startTimer(BASE_SAMPLING_FREQ); // start up the data sampling timer
-#endif
-				}
+				startRecording(datetimeString);
 			}
 			else if (header.typeTag.equals(EmotiBitPacket::TypeTag::RECORD_END)) { // Recording end
-				if (_dataFile) {
-					_dataFile.close();
-				}
-				_sdWrite = false;
-				Serial.println("** Recording End **");
+				endRecording();
 			}
 			else if (header.typeTag.equals(EmotiBitPacket::TypeTag::MODE_NORMAL_POWER)) {
 				setPowerMode(EmotiBit::PowerMode::NORMAL_POWER);
@@ -1544,6 +1495,95 @@ void EmotiBit::parseIncomingControlPackets(String &controlPackets, uint16_t &pac
 			controlPackets += EmotiBitPacket::createPacket(header.typeTag, packetNumber++, packet.substring(dataStartChar, packet.length()), header.dataLength);
 		}
 	}
+}
+
+void EmotiBit::parseBLEControlPackets() {
+	BluetoothPacket blePacketType;
+	uint64_t blePacketData;
+	while (emotibitBluetooth.retrieveData(&blePacketType, &blePacketData)) {
+		Serial.print("Received BLE package of type: ");
+		Serial.print((uint8_t)blePacketType);
+		Serial.print(", with data: ");
+		Serial.println(blePacketData);
+		switch (blePacketType)
+		{
+		case BluetoothPacket::UPDATE_INTERVAL:
+			emotibitBluetooth.setUpdateInterval(blePacketData);
+			continue;;
+		case BluetoothPacket::RECORDING:
+			switch (blePacketData)
+			{
+			case 0:
+				endRecording();
+				continue;
+			case 1:
+				bool recordingStarted = startRecording("Test-aufnahme");
+				if (!recordingStarted) {
+					emotibitBluetooth.setRecordingStatus(0xf);
+				}
+				continue;
+			}
+		}
+	}
+}
+
+bool EmotiBit::startRecording(String datetimeString) {
+	#ifdef ADAFRUIT_FEATHER_M0
+		stopTimer();	// stop the data sampling timer
+	#endif
+	// Write the configuration info to json file
+	#if defined(ARDUINO_FEATHER_ESP32)
+		String infoFilename = "/" + datetimeString + "_info.json";
+	#else
+		String infoFilename = datetimeString + "_info.json";
+	#endif
+	_dataFile = SD.open(infoFilename, FILE_WRITE);
+	if (_dataFile) {
+		if (!printConfigInfo(_dataFile, datetimeString)) {
+			Serial.println(F("Failed to write to info file"));
+		}
+		_dataFile.close();
+	}
+	Serial.println("Creating new file to write data");
+	// Try to open the data file to be sure we can write
+	_sdCardFilename = datetimeString + ".csv";
+	uint32_t start_timeOpenFile = millis();
+	#if defined ARDUINO_FEATHER_ESP32
+	_dataFile = SD.open("/" + _sdCardFilename, FILE_WRITE);
+	#else 
+		_dataFile = SD.open(_sdCardFilename, O_CREAT | O_WRITE | O_AT_END);
+	#endif
+	if (!_sendTestData)
+	{
+	#ifdef ADAFRUIT_FEATHER_M0
+		startTimer(BASE_SAMPLING_FREQ); // start up the data sampling timer
+	#endif
+	}
+	if (_dataFile) {
+		// Clear the data buffers before writing to file to avoid mismatches
+		processData();
+		sendData();
+		processData();
+		sendData();
+		_sdWrite = true;
+		Serial.print("** Recording Begin: ");
+		Serial.print(_sdCardFilename);
+		Serial.println(" **");
+		// ToDo: need to communicate back to Visualizer if we were able to open a file
+		return true;
+	}
+	else {
+		Serial.println("Failed to open data file for writing");
+		return false;
+	}
+}
+
+void EmotiBit::endRecording() {
+	if (_dataFile) {
+		_dataFile.close();
+	}
+	_sdWrite = false;
+	Serial.println("** Recording End **");
 }
 
 void EmotiBit::updateButtonPress()
@@ -1648,6 +1688,8 @@ uint8_t EmotiBit::update()
 	inControlPackets = "";
 
 
+	// parse bluetooth control packets
+	parseBLEControlPackets();
 	
 	// Update the button status and handle callbacks
 	updateButtonPress();

@@ -28,6 +28,7 @@ uint8_t EmotiBitWiFi::begin(int32_t timeout, uint8_t maxAttemptsPerCred, uint16_
 		if (numCredentials == 0)
 		{
 			Serial.println("NO WIFI CREDENTIALS FOUND");
+			break;
 		}
 		else
 		{
