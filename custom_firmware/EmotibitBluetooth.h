@@ -2,6 +2,7 @@
 
 #include <SPI.h>
 #include <ArduinoBLE.h>
+#include "BluetoothPacket.h"
 
 class EmotibitBluetooth
 {
@@ -15,6 +16,11 @@ public:
     void setup(String deviceName, String pairingCode);
     void initServices();
     void sendData();
+    bool retrieveData(BluetoothPacket* packetType, uint32_t* buffer);
     void updateBatteryLevel(float batteryLevel);
     void updateHeartRate(float heartRate);
+
+    // control functions
+    void setUpdateInterval(uint32_t interval);
+    void setRecordingStatus(uint8_t status);
 };

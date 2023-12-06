@@ -7,6 +7,6 @@
   ],
   "BluetoothCredentials": {
     "deviceName": "Emotibit",
-    "pairingCode": ""
+    "pairingCode": "123456"
   }
 }

@@ -1499,7 +1499,7 @@ void EmotiBit::parseIncomingControlPackets(String &controlPackets, uint16_t &pac
 
 void EmotiBit::parseBLEControlPackets() {
 	BluetoothPacket blePacketType;
-	uint64_t blePacketData;
+	uint32_t blePacketData;
 	while (emotibitBluetooth.retrieveData(&blePacketType, &blePacketData)) {
 		Serial.print("Received BLE package of type: ");
 		Serial.print((uint8_t)blePacketType);

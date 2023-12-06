@@ -19,3 +19,6 @@
 **/test
 **/Release
 **/Debug
+
+# MacOS
+.DS_Store

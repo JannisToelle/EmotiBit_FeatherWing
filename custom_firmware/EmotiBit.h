@@ -450,6 +450,9 @@ public:
 	bool addPacket(uint32_t timestamp, EmotiBit::DataType t, float * data, size_t dataLen, uint8_t precision = 4);
 	bool addPacket(EmotiBit::DataType t);
 	void parseIncomingControlPackets(String &controlPackets, uint16_t &packetNumber);
+	void parseBLEControlPackets();
+	bool startRecording(String datetimeString);
+	void endRecording();
 	void readSensors();
 	void processHeartRate();
 	void processData();
