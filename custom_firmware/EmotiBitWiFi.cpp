@@ -11,6 +11,7 @@ uint8_t EmotiBitWiFi::begin(int32_t timeout, uint8_t maxAttemptsPerCred, uint16_
 {
 	uint8_t wifiStatus = status();
 	uint32_t startBegin = millis();
+	uint8_t attempt = 1;
 #if defined ARDUINO_FEATHER_ESP32
 	// Taken from scanNetworks example
 	WiFi.mode(WIFI_STA);
@@ -36,13 +37,18 @@ uint8_t EmotiBitWiFi::begin(int32_t timeout, uint8_t maxAttemptsPerCred, uint16_
 			if (wifiStatus == WL_CONNECTED) {
 				break;
 			}
+			attempt++;
 		}
 		if ((timeout > -1 ) && (millis() - startBegin > timeout))
 		{
 			Serial.println("*********** EmotiBitWiFi.begin() Timeout ***********");
 			break;
 		}
-		Serial.println("<<<<<<< Switching WiFi Networks >>>>>>>");
+		if (currentCredential == (numCredentials - 1) && attempt >= maxAttemptsPerCred * numCredentials) {
+			Serial.println("Stopping WIFI connection attempts");
+			break;
+		}
+ 		Serial.println("<<<<<<< Switching WiFi Networks >>>>>>>");
 		currentCredential = (currentCredential + 1) % numCredentials;
 	}
 	return wifiStatus;
