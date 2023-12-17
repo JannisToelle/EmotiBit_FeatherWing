@@ -1499,29 +1499,37 @@ void EmotiBit::parseIncomingControlPackets(String &controlPackets, uint16_t &pac
 
 void EmotiBit::parseBLEControlPackets() {
 	BluetoothPacket blePacketType;
-	uint32_t blePacketData;
-	while (emotibitBluetooth.retrieveData(&blePacketType, &blePacketData)) {
-		Serial.print("Received BLE package of type: ");
+	uint8_t blePacketData[MAX_BLE_DATA_LENGTH];
+	int dataLength = 0;
+	while (true) {
+		memset(blePacketData, 0, MAX_BLE_DATA_LENGTH);
+		dataLength = emotibitBluetooth.retrieveData(&blePacketType, blePacketData);
+		if (dataLength == 0) {
+			break;
+		}
+		Serial.printf("Received BLE package of type %u with length %u and data: ", blePacketType, dataLength);
 		Serial.print((uint8_t)blePacketType);
-		Serial.print(", with data: ");
-		Serial.println(blePacketData);
 		switch (blePacketType)
 		{
-		case BluetoothPacket::UPDATE_INTERVAL:
-			emotibitBluetooth.setUpdateInterval(blePacketData);
-			continue;;
-		case BluetoothPacket::RECORDING:
-			switch (blePacketData)
+			case BluetoothPacket::UPDATE_INTERVAL:
 			{
-			case 0:
-				endRecording();
-				continue;
-			case 1:
-				bool recordingStarted = startRecording("Test-aufnahme");
-				if (!recordingStarted) {
-					emotibitBluetooth.setRecordingStatus(0xf);
+				uint32_t interval;
+				memcpy(&interval, blePacketData, sizeof(interval));
+				Serial.println(interval);
+				emotibitBluetooth.setUpdateInterval(interval);
+				break;
+			}
+			case BluetoothPacket::RECORDING:
+			{
+				char* recordingStart = (char*)blePacketData;
+				Serial.println(recordingStart);
+				bool stopRecording = strcmp(recordingStart, BLE_NOT_RECORDING_STAUTS) == 0;
+				if (stopRecording && _sdWrite) {
+					endRecording();
+				} else if (!stopRecording && !_sdWrite){
+					startRecording(recordingStart);
 				}
-				continue;
+				break;	
 			}
 		}
 	}
@@ -1547,7 +1555,6 @@ bool EmotiBit::startRecording(String datetimeString) {
 	Serial.println("Creating new file to write data");
 	// Try to open the data file to be sure we can write
 	_sdCardFilename = datetimeString + ".csv";
-	uint32_t start_timeOpenFile = millis();
 	#if defined ARDUINO_FEATHER_ESP32
 	_dataFile = SD.open("/" + _sdCardFilename, FILE_WRITE);
 	#else 
@@ -1570,10 +1577,12 @@ bool EmotiBit::startRecording(String datetimeString) {
 		Serial.print(_sdCardFilename);
 		Serial.println(" **");
 		// ToDo: need to communicate back to Visualizer if we were able to open a file
+		emotibitBluetooth.setRecordingSince(datetimeString);
 		return true;
 	}
 	else {
 		Serial.println("Failed to open data file for writing");
+		emotibitBluetooth.setRecordingSince(BLE_NOT_RECORDING_STAUTS);
 		return false;
 	}
 }
@@ -1583,6 +1592,7 @@ void EmotiBit::endRecording() {
 		_dataFile.close();
 	}
 	_sdWrite = false;
+	emotibitBluetooth.setRecordingSince(BLE_NOT_RECORDING_STAUTS);
 	Serial.println("** Recording End **");
 }
 

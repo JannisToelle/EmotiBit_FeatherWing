@@ -4,7 +4,6 @@
 #define BLE_MAX_UPDATE_INTERVAL 10000
 #define DESCRIPTOR_UUID "00002901-0000-1000-8000-00805f9b34fb"
 
-
 BLEService heartRateService("0000180d-0000-1000-8000-00805f9b34fb");
 BLEUnsignedIntCharacteristic heartRateChar("00002a37-0000-1000-8000-00805f9b34fb", BLERead | BLENotify);
 BLEDescriptor heartRateDescr(DESCRIPTOR_UUID, "Heart rate");
@@ -17,8 +16,12 @@ BLEDescriptor batteryLevelDescr(DESCRIPTOR_UUID, "Battery level");
 BLEService controlService("84c08996-94a3-45c0-b31c-3504b77ce3ee");
 BLEUnsignedIntCharacteristic updateIntervalChar("48949191-cf24-427b-bad6-036e4532e00f", BLERead | BLEWrite | BLENotify);
 BLEDescriptor updateIntervalDescr(DESCRIPTOR_UUID, "Bluetooth update interval");
-BLEUnsignedIntCharacteristic recordingChar("b6c8e04a-693e-4b6b-a068-d1729bd20105", BLERead | BLEWrite | BLENotify);
-BLEDescriptor recordingDescr(DESCRIPTOR_UUID, "Emotibit recording status");
+
+BLEStringCharacteristic recordingChar("b6c8e04a-693e-4b6b-a068-d1729bd20105", BLERead | BLEWrite, MAX_BLE_DATA_LENGTH);
+BLEDescriptor recordingDescr(DESCRIPTOR_UUID, "Recording since");
+
+BLEUnsignedIntCharacteristic runTimeChar("23b55464-c23a-4e6b-a85f-87067e39055d", BLERead);
+BLEDescriptor runTimeDescr(DESCRIPTOR_UUID, "Runtime in ms");
 
 long previousMillis = 0; // last time data was sent over ble
 bool wasConnected = false;
@@ -62,15 +65,20 @@ void EmotibitBluetooth::initServices()
     batteryLevelChar.addDescriptor(batteryLevelDescr);
     BLE.addService(batteryService);
 
+    // custom services
     updateIntervalChar.addDescriptor(updateIntervalDescr);
     recordingChar.addDescriptor(recordingDescr);
+    runTimeChar.addDescriptor(runTimeDescr);
+
     controlService.addCharacteristic(updateIntervalChar);
     controlService.addCharacteristic(recordingChar);
+    controlService.addCharacteristic(runTimeChar);
     BLE.addService(controlService);
 
     // init characteristic values
     updateIntervalChar.writeValue(bleUpdateInterval);
-    recordingChar.writeValue(0);
+    recordingChar.writeValue(BLE_NOT_RECORDING_STAUTS);
+    runTimeChar.writeValue(millis());
 }
 
 void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
@@ -113,20 +121,19 @@ void EmotibitBluetooth::sendData()
         {
             previousMillis = currentMillis;
 
-            if (batteryBuffer[0] != batteryBuffer[1])
-            {
-                batteryLevelChar.writeValue(batteryBuffer[0]);
-                batteryBuffer[1] = batteryBuffer[0];
-                Serial.print("sending battery percentage: ");
-                Serial.println(batteryBuffer[0]);
-            }
-            if (heartRateBuffer[0] != heartRateBuffer[1])
-            {
-                heartRateChar.writeValue(heartRateBuffer[0]);
-                heartRateBuffer[1] = heartRateBuffer[0];
-                Serial.print("sending heart rate: ");
-                Serial.println(heartRateBuffer[0]);
-            }
+            batteryLevelChar.writeValue(batteryBuffer[0]);
+            batteryBuffer[1] = batteryBuffer[0];
+            Serial.print("sending battery percentage: ");
+            Serial.println(batteryBuffer[0]);
+
+            heartRateChar.writeValue(heartRateBuffer[0]);
+            heartRateBuffer[1] = heartRateBuffer[0];
+            Serial.print("sending heart rate: ");
+            Serial.println(heartRateBuffer[0]);
+
+            runTimeChar.writeValue(currentMillis);
+            Serial.print("sending runtime in ms: ");
+            Serial.println(currentMillis);
         }
     }
     else if (wasConnected)
@@ -154,39 +161,36 @@ void EmotibitBluetooth::setUpdateInterval(uint32_t interval)
     updateIntervalChar.writeValue(bleUpdateInterval);
 }
 
-void EmotibitBluetooth::setRecordingStatus(uint8_t status)
-{
-    recordingChar.writeValue(status);
+void EmotibitBluetooth::setRecordingSince(String recordingSince) {
+    recordingChar.writeValue(recordingSince);
 }
 
-bool EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint32_t *buffer)
+int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer)
 {
     if (updateIntervalChar.written())
     {
         uint32_t readValue;
-        // int bytesRead = updateIntervalChar.readValue((uint8_t&)readValue);
-        int bytesRead = updateIntervalChar.readValue(readValue);
+        int dataLength = updateIntervalChar.readValue(readValue);
 
-        Serial.println(readValue);
-        Serial.println(bytesRead);
-        *buffer = readValue;
+        memcpy(buffer, &readValue, dataLength);
         *packetType = BluetoothPacket::UPDATE_INTERVAL;
-
-        return true;
+        return dataLength;
     }
 
     if (recordingChar.written())
     {
-        uint8_t readValue = 0;
-        int bytesRead = updateIntervalChar.readValue(readValue);
+        int dataLength = recordingChar.valueLength();
+        int bytesRead = recordingChar.readValue(buffer, dataLength);
 
-        Serial.println(readValue);
-        Serial.println(bytesRead);
-        *buffer = readValue;
-        *packetType = BluetoothPacket::RECORDING;
-
-        return true;
+        if (bytesRead != dataLength)
+        {
+            Serial.printf("Only read %u out of %u bytes", bytesRead, dataLength);
+        }
+        // add null terminator
+        buffer[bytesRead] = 0;
+        *packetType = BluetoothPacket::RECORDING;    
+        return bytesRead + 1;
     }
 
-    return false;
+    return 0;
 }
