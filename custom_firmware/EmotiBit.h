@@ -443,6 +443,8 @@ public:
 	void attachLongButtonPress(void(*longButtonPressFunction)(void));
 	PowerMode getPowerMode();
 	void setPowerMode(PowerMode mode);
+	String listSdCardFiles();
+	File readFile(const String &fileName);
 	bool writeSdCardMessage(const String &s);
 	int freeMemory();
 	bool loadConfigFile(const String &filename);

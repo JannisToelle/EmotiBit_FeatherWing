@@ -1,9 +1,5 @@
 #include "EmotibitBluetooth.h"
 
-#define BLE_MIN_UPDATE_INTERVAL 100
-#define BLE_MAX_UPDATE_INTERVAL 10000
-#define DESCRIPTOR_UUID "00002901-0000-1000-8000-00805f9b34fb"
-
 BLEService heartRateService("0000180d-0000-1000-8000-00805f9b34fb");
 BLEUnsignedIntCharacteristic heartRateChar("00002a37-0000-1000-8000-00805f9b34fb", BLERead | BLENotify);
 BLEDescriptor heartRateDescr(DESCRIPTOR_UUID, "Heart rate");
@@ -23,12 +19,25 @@ BLEDescriptor recordingDescr(DESCRIPTOR_UUID, "Recording since");
 BLEUnsignedIntCharacteristic runTimeChar("23b55464-c23a-4e6b-a85f-87067e39055d", BLERead);
 BLEDescriptor runTimeDescr(DESCRIPTOR_UUID, "Runtime in ms");
 
+BLEStringCharacteristic fileListChar("d4514e95-d053-4a47-b437-6a31f134f84b", BLERead | BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
+BLEDescriptor fileListDescr(DESCRIPTOR_UUID, "List files");
+
+BLEStringCharacteristic fileTransferChar("74759e9c-ee42-4f67-ad82-d0550baf3ebe", BLERead | BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
+BLEDescriptor fileTransferDescr(DESCRIPTOR_UUID, "File transfer");
+
+BLEStringCharacteristic fileDeleteChar("daf1816c-2e6e-4d34-b823-bbfbd14715be", BLERead | BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
+BLEDescriptor fileDeleteDescr(DESCRIPTOR_UUID, "Delete file");
+
+BLEStringCharacteristic dataTransferChar("62df6e1c-cd7f-491d-aa63-f064a18c0ba4", BLERead | BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
+BLEDescriptor dataTransferDescr(DESCRIPTOR_UUID, "Data transfer");
+
 long previousMillis = 0; // last time data was sent over ble
 bool wasConnected = false;
 uint64_t bleUpdateInterval = 3000;
 
-void EmotibitBluetooth::setup(String deviceName, String pairingCode)
+void EmotibitBluetooth::setup(const String &deviceName, const String &pairingCode)
 {
+    maxPacketSize = BLE_FILE_TRANSFER_PACKET_SIZE;
     // ignore pairing code for now
 
     // begin initialization
@@ -69,16 +78,28 @@ void EmotibitBluetooth::initServices()
     updateIntervalChar.addDescriptor(updateIntervalDescr);
     recordingChar.addDescriptor(recordingDescr);
     runTimeChar.addDescriptor(runTimeDescr);
+    fileListChar.addDescriptor(fileListDescr);
+    fileTransferChar.addDescriptor(fileTransferDescr);
+    fileDeleteChar.addDescriptor(fileDeleteDescr);
+    dataTransferChar.addDescriptor(dataTransferDescr);
 
     controlService.addCharacteristic(updateIntervalChar);
     controlService.addCharacteristic(recordingChar);
     controlService.addCharacteristic(runTimeChar);
+    controlService.addCharacteristic(fileListChar);
+    controlService.addCharacteristic(fileTransferChar);
+    controlService.addCharacteristic(fileDeleteChar);
+    controlService.addCharacteristic(dataTransferChar);
     BLE.addService(controlService);
 
     // init characteristic values
     updateIntervalChar.writeValue(bleUpdateInterval);
     recordingChar.writeValue(BLE_NOT_RECORDING_STAUTS);
     runTimeChar.writeValue(millis());
+    fileListChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
+    fileTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
+    fileDeleteChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
+    dataTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
 }
 
 void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
@@ -123,17 +144,17 @@ void EmotibitBluetooth::sendData()
 
             batteryLevelChar.writeValue(batteryBuffer[0]);
             batteryBuffer[1] = batteryBuffer[0];
-            Serial.print("sending battery percentage: ");
-            Serial.println(batteryBuffer[0]);
+            // Serial.print("sending battery percentage: ");
+            // Serial.println(batteryBuffer[0]);
 
             heartRateChar.writeValue(heartRateBuffer[0]);
             heartRateBuffer[1] = heartRateBuffer[0];
-            Serial.print("sending heart rate: ");
-            Serial.println(heartRateBuffer[0]);
+            // Serial.print("sending heart rate: ");
+            // Serial.println(heartRateBuffer[0]);
 
             runTimeChar.writeValue(currentMillis);
-            Serial.print("sending runtime in ms: ");
-            Serial.println(currentMillis);
+            // Serial.print("sending runtime in ms: ");
+            // Serial.println(currentMillis);
         }
     }
     else if (wasConnected)
@@ -161,7 +182,7 @@ void EmotibitBluetooth::setUpdateInterval(uint32_t interval)
     updateIntervalChar.writeValue(bleUpdateInterval);
 }
 
-void EmotibitBluetooth::setRecordingSince(String recordingSince) {
+void EmotibitBluetooth::setRecordingSince(const String &recordingSince) {
     recordingChar.writeValue(recordingSince);
 }
 
@@ -192,5 +213,113 @@ int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer
         return bytesRead + 1;
     }
 
+    if (fileListChar.written()) {
+        fileListChar.readValue(buffer, 1);
+
+        *packetType = BluetoothPacket::FILE_LIST;
+        return 1;
+    }
+
+    if (fileTransferChar.written()) {
+        int dataLength = fileTransferChar.valueLength();
+        int bytesRead = fileTransferChar.readValue(buffer, dataLength);
+
+        if (bytesRead != dataLength)
+        {
+            Serial.printf("Only read %u out of %u bytes", bytesRead, dataLength);
+        }
+        // add null terminator
+        buffer[bytesRead] = 0;
+
+        *packetType = BluetoothPacket::FILE_TRANSFER;
+        return bytesRead + 1;
+    }
+
+    if (fileDeleteChar.written()) {
+        int dataLength = fileDeleteChar.valueLength();
+        int bytesRead = fileDeleteChar.readValue(buffer, dataLength);
+        
+        if (bytesRead != dataLength)
+        {
+            Serial.printf("Only read %u out of %u bytes", bytesRead, dataLength);
+        }
+        // add null terminator
+        buffer[bytesRead] = 0;
+
+        *packetType = BluetoothPacket::FILE_DELETE;
+        return bytesRead + 1;
+    }
+
     return 0;
+}
+
+void EmotibitBluetooth::transferFile(File & file) {
+    uint32_t fileSize = file.size();
+    char buffer[maxPacketSize + 1];
+    int packetCount = calculatePacketCount(fileSize);
+
+    sendPacketCountControlPacket(packetCount);
+    for (int i = 0; i < packetCount; i++) {
+        memset(buffer, 0, (maxPacketSize + 1) * sizeof(char));
+        if (dataTransferCancelReceived()) {
+            Serial.println("Cancelling data transfer");
+            file.close();
+            break;
+        }
+        int filePosition = i * maxPacketSize;
+        file.seek(filePosition);
+        int readSize = min(maxPacketSize, fileSize - filePosition);
+        file.readBytes(buffer, readSize);
+        // add null terminator
+        buffer[readSize] = 0;
+        dataTransferChar.writeValue(buffer);
+    }
+    sendDataTransferCompletePacket();
+    file.close();
+}
+
+void EmotibitBluetooth::transferData(const String &fileData) {
+    int packetCount = calculatePacketCount(fileData.length());
+    sendPacketCountControlPacket(packetCount);
+    sendPackets(fileData);
+    sendDataTransferCompletePacket();
+}
+
+int EmotibitBluetooth::calculatePacketCount(int dataLength) {
+    return ceil(1.0f * dataLength / maxPacketSize);
+}
+
+void EmotibitBluetooth::sendPacketCountControlPacket(int packetCount) {
+    std::string packetCountMessage = "packetCount=" + std::to_string(packetCount);
+    dataTransferChar.writeValue(packetCountMessage.c_str());
+}
+
+void EmotibitBluetooth::sendDataTransferCompletePacket() {
+    dataTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
+}
+
+void EmotibitBluetooth::sendPackets(const String &data) {
+    int packetCount = calculatePacketCount(data.length());
+    for(int packet = 0; packet < packetCount; packet++) {
+        if (dataTransferCancelReceived()) {
+            Serial.println("Cancelling data transfer");
+            break;
+        }
+        String packetData = data.substring(packet * BLE_FILE_TRANSFER_PACKET_SIZE,
+            packet * BLE_FILE_TRANSFER_PACKET_SIZE + BLE_FILE_TRANSFER_PACKET_SIZE);
+        dataTransferChar.writeValue(packetData);
+    }
+}
+
+bool EmotibitBluetooth::dataTransferCancelReceived() {
+    if (dataTransferChar.written()) {
+        uint8_t value;
+        dataTransferChar.readValue(value);
+        char stringValue[2];
+        stringValue[0] = value;
+        // add null terminator
+        stringValue[1] = 0;
+        return strcmp(stringValue, BLE_DATA_TRANSFER_INACTIVE) == 0;
+    }
+    return false;
 }

@@ -2,11 +2,17 @@
 
 #include <SPI.h>
 #include <ArduinoBLE.h>
+#include "FS.h"
 #include "BluetoothPacket.h"
 
-// 100 bytes for data + 1 byte for null terminators in case of strings
-#define MAX_BLE_DATA_LENGTH 100 + 1
+#define BLE_MIN_UPDATE_INTERVAL 100
+#define BLE_MAX_UPDATE_INTERVAL 10000
+#define DESCRIPTOR_UUID "00002901-0000-1000-8000-00805f9b34fb"
 #define BLE_NOT_RECORDING_STAUTS "0"
+#define BLE_DATA_TRANSFER_ACTIVE "1"
+#define BLE_DATA_TRANSFER_INACTIVE "0"
+#define BLE_FILE_TRANSFER_PACKET_SIZE 20
+#define MAX_BLE_DATA_LENGTH 512
 
 class EmotibitBluetooth
 {
@@ -14,10 +20,16 @@ private:
     // index 0 holds current value, index 1 hold previous value
     uint8_t batteryBuffer[2];
     uint8_t heartRateBuffer[2];
+    uint32_t maxPacketSize;
     void initBuffers();
+    int calculatePacketCount(int dataLength);
+    void sendPacketCountControlPacket(int packetCount);
+    void sendDataTransferCompletePacket();
+    void sendPackets(const String &data);
+    bool dataTransferCancelReceived();
 
 public:
-    void setup(String deviceName, String pairingCode);
+    void setup(const String &deviceName, const String &pairingCode);
     void initServices();
     void sendData();
     int retrieveData(BluetoothPacket* packetType, uint8_t* buffer);
@@ -26,5 +38,8 @@ public:
 
     // control functions
     void setUpdateInterval(uint32_t interval);
-    void setRecordingSince(String recordingSince);
+    void setRecordingSince(const String &recordingSince);
+
+    void transferFile(File &file);
+    void transferData(const String &data);
 };

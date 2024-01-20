@@ -1275,6 +1275,9 @@ bool EmotiBit::setupSdCard()
 
 bool EmotiBit::addPacket(uint32_t timestamp, const String typeTag, float * data, size_t dataLen, uint8_t precision, bool printToSerial)
 {
+	if (!typeTag.equals(EmotiBitPacket::TypeTag::HEART_RATE) && !typeTag.equals(EmotiBitPacket::TypeTag::SPO2)) {
+		return false;
+	}
 	static EmotiBitPacket::Header header;
 	if (dataLen > 0) 
 	{
@@ -1508,7 +1511,6 @@ void EmotiBit::parseBLEControlPackets() {
 			break;
 		}
 		Serial.printf("Received BLE package of type %u with length %u and data: ", blePacketType, dataLength);
-		Serial.print((uint8_t)blePacketType);
 		switch (blePacketType)
 		{
 			case BluetoothPacket::UPDATE_INTERVAL:
@@ -1530,6 +1532,32 @@ void EmotiBit::parseBLEControlPackets() {
 					startRecording(recordingStart);
 				}
 				break;	
+			}
+			case BluetoothPacket::FILE_LIST:
+			{
+				char* data = (char*)blePacketData;
+				Serial.println(data);
+
+				bool startFileListTransfer = strcmp(data, BLE_DATA_TRANSFER_ACTIVE) == 0;
+				if (startFileListTransfer) {
+					String fileList = listSdCardFiles();
+					emotibitBluetooth.transferData(fileList);
+				}
+				break;
+			}
+			case BluetoothPacket::FILE_TRANSFER:
+			{
+				char* fileName = (char*)blePacketData;
+				Serial.println(fileName);
+				File file = readFile(fileName);
+				emotibitBluetooth.transferFile(file);
+				break;
+			}
+			case BluetoothPacket::FILE_DELETE:
+			{
+				char* fileName = (char*)blePacketData;
+				Serial.println(fileName);
+				break;
 			}
 		}
 	}
@@ -3619,6 +3647,37 @@ bool EmotiBit::loadConfigFile(const String &filename) {
 	return true;
 }
 
+// Return a list of recordings on sd card
+String EmotiBit::listSdCardFiles() {
+	String files = "";
+	File dir = SD.open("/");
+	// taken from SD examples: listFiles
+	while (true)
+	{
+		File entry = dir.openNextFile();
+		if (!entry) {
+			// no more files
+			break;
+		}
+		String entryName = String(entry.name());
+		bool entryIsCsv = entryName.endsWith(".csv") && !entryName.startsWith(".");
+		if (!entry.isDirectory() && entryIsCsv) {
+
+			if (files.length() > 0) {
+				files.concat("\n");
+			}
+			files.concat(entryName + ";" + entry.size());
+		}
+		
+		entry.close();
+	}
+
+	return files;
+}
+
+File EmotiBit::readFile(const String &fileName) {
+	return SD.open("/" + fileName);
+}
 
 bool EmotiBit::writeSdCardMessage(const String & s) {
 	// Break up the message in to bite-size chunks to avoid over running the UDP or SD card write buffers
@@ -3911,7 +3970,7 @@ void EmotiBit::sendModePacket(String &sentModePacket, uint16_t &packetNumber)
 	createModePacket(sentModePacket, packetNumber);
 	// ToDo: This should probably be over TCP in response to specific messages from Host (but will require writing TCP ingest)
 	_emotiBitWiFi.sendData(sentModePacket);	// Send packet immediately to update host
-	_outDataPackets += sentModePacket;			// Add packet to slower data logging bucket
+	//_outDataPackets += sentModePacket;			// Add packet to slower data logging bucket
 }
 
 void EmotiBit::processDebugInputs(String &debugPackets, uint16_t &packetNumber)
