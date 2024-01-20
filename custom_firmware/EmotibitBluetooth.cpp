@@ -50,7 +50,6 @@ void EmotibitBluetooth::setup(const String &deviceName, const String &pairingCod
     BLE.setLocalName(deviceName.c_str());
     BLE.setAdvertisedService(heartRateService);
 
-    initBuffers();
     initServices();
 
     /* Start advertising Bluetooth® Low Energy.  It will start continuously transmitting Bluetooth® Low Energy
@@ -104,20 +103,12 @@ void EmotibitBluetooth::initServices()
 
 void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
 {
-    batteryBuffer[0] = (uint8_t)batteryLevel;
+    batteryPercentage = (uint8_t)batteryLevel;
 }
 
 void EmotibitBluetooth::updateHeartRate(float heartRate)
 {
-    heartRateBuffer[0] = (uint8_t)heartRate;
-}
-
-void EmotibitBluetooth::initBuffers()
-{
-    batteryBuffer[0] = 0;
-    batteryBuffer[1] = 0;
-    heartRateBuffer[0] = 0;
-    heartRateBuffer[1] = 0;
+    heartRate = (uint8_t)heartRate;
 }
 
 void EmotibitBluetooth::sendData()
@@ -142,19 +133,9 @@ void EmotibitBluetooth::sendData()
         {
             previousMillis = currentMillis;
 
-            batteryLevelChar.writeValue(batteryBuffer[0]);
-            batteryBuffer[1] = batteryBuffer[0];
-            // Serial.print("sending battery percentage: ");
-            // Serial.println(batteryBuffer[0]);
-
-            heartRateChar.writeValue(heartRateBuffer[0]);
-            heartRateBuffer[1] = heartRateBuffer[0];
-            // Serial.print("sending heart rate: ");
-            // Serial.println(heartRateBuffer[0]);
-
+            batteryLevelChar.writeValue(batteryPercentage);
+            heartRateChar.writeValue(heartRate);
             runTimeChar.writeValue(currentMillis);
-            // Serial.print("sending runtime in ms: ");
-            // Serial.println(currentMillis);
         }
     }
     else if (wasConnected)

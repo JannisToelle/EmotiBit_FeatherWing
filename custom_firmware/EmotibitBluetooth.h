@@ -17,11 +17,9 @@
 class EmotibitBluetooth
 {
 private:
-    // index 0 holds current value, index 1 hold previous value
-    uint8_t batteryBuffer[2];
-    uint8_t heartRateBuffer[2];
+    uint8_t batteryPercentage;
+    uint8_t heartRate;
     uint32_t maxPacketSize;
-    void initBuffers();
     int calculatePacketCount(int dataLength);
     void sendPacketCountControlPacket(int packetCount);
     void sendDataTransferCompletePacket();
