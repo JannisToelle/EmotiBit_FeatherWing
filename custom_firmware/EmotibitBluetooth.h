@@ -11,8 +11,9 @@
 #define BLE_NOT_RECORDING_STAUTS "0"
 #define BLE_DATA_TRANSFER_ACTIVE "1"
 #define BLE_DATA_TRANSFER_INACTIVE "0"
-#define BLE_FILE_TRANSFER_PACKET_SIZE 20
-#define MAX_BLE_DATA_LENGTH 512
+#define BLE_TRANSFER_RESERVED_BYTES 3
+#define BLE_FILE_TRANSFER_PACKET_SIZE 23 - BLE_TRANSFER_RESERVED_BYTES
+#define MAX_BLE_DATA_LENGTH 512 - BLE_TRANSFER_RESERVED_BYTES
 
 class EmotibitBluetooth
 {
@@ -30,6 +31,7 @@ public:
     void setup(const String &deviceName, const String &pairingCode);
     void initServices();
     void sendData();
+    void processEvents();
     int retrieveData(BluetoothPacket* packetType, uint8_t* buffer);
     void updateBatteryLevel(float batteryLevel);
     void updateHeartRate(float heartRate);

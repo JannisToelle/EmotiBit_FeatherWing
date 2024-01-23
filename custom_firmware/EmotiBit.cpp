@@ -1561,6 +1561,7 @@ void EmotiBit::parseBLEControlPackets() {
 			}
 		}
 	}
+	emotibitBluetooth.processEvents();
 }
 
 bool EmotiBit::startRecording(String datetimeString) {

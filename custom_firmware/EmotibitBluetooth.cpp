@@ -31,6 +31,14 @@ BLEDescriptor fileDeleteDescr(DESCRIPTOR_UUID, "Delete file");
 BLEStringCharacteristic dataTransferChar("62df6e1c-cd7f-491d-aa63-f064a18c0ba4", BLERead | BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
 BLEDescriptor dataTransferDescr(DESCRIPTOR_UUID, "Data transfer");
 
+// Use this to test the maximum mtu. When reading you will receive a packet of the maximum length both devices support
+BLEStringCharacteristic mtuTestChar("b6780fc6-0dba-47f1-b5f1-de1e17c1c94c", BLEWrite | BLENotify, MAX_BLE_DATA_LENGTH);
+BLEDescriptor mtuTestDescr(DESCRIPTOR_UUID, "Test mtu");
+
+// Use this to set the mtu for all future packets. When set too high you will lose data, so test it first using the mtuTest characteristic
+BLEUnsignedIntCharacteristic mtuChar("df1a1a91-c61b-4845-9bd2-9aae919540be", BLERead | BLEWrite);
+BLEDescriptor mtuDescr(DESCRIPTOR_UUID, "MTU");
+
 long previousMillis = 0; // last time data was sent over ble
 bool wasConnected = false;
 uint64_t bleUpdateInterval = 3000;
@@ -49,6 +57,8 @@ void EmotibitBluetooth::setup(const String &deviceName, const String &pairingCod
     BLE.setDeviceName(deviceName.c_str());
     BLE.setLocalName(deviceName.c_str());
     BLE.setAdvertisedService(heartRateService);
+
+    BLE.setConnectionInterval(0x0006, 0x0c80); // 7.5 ms minimum, 4 s maximum
 
     initServices();
 
@@ -81,6 +91,8 @@ void EmotibitBluetooth::initServices()
     fileTransferChar.addDescriptor(fileTransferDescr);
     fileDeleteChar.addDescriptor(fileDeleteDescr);
     dataTransferChar.addDescriptor(dataTransferDescr);
+    mtuTestChar.addDescriptor(mtuTestDescr);
+    mtuChar.addDescriptor(mtuDescr);
 
     controlService.addCharacteristic(updateIntervalChar);
     controlService.addCharacteristic(recordingChar);
@@ -89,6 +101,8 @@ void EmotibitBluetooth::initServices()
     controlService.addCharacteristic(fileTransferChar);
     controlService.addCharacteristic(fileDeleteChar);
     controlService.addCharacteristic(dataTransferChar);
+    controlService.addCharacteristic(mtuTestChar);
+    controlService.addCharacteristic(mtuChar);
     BLE.addService(controlService);
 
     // init characteristic values
@@ -99,6 +113,8 @@ void EmotibitBluetooth::initServices()
     fileTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
     fileDeleteChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
     dataTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
+    mtuTestChar.writeValue(std::string(MAX_BLE_DATA_LENGTH, '1').c_str());
+    mtuChar.writeValue(packetSize);
 }
 
 void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
@@ -146,6 +162,17 @@ void EmotibitBluetooth::sendData()
     }
 }
 
+void EmotibitBluetooth::processEvents()
+{
+    if (mtuChar.written())
+    {
+        uint32_t mtu;
+        mtuChar.readValue(mtu);
+        packetSize = mtu;
+        Serial.printf("MTU updated to: %u\n", mtu);
+    }
+}
+
 void EmotibitBluetooth::setUpdateInterval(uint32_t interval)
 {
     if (interval < BLE_MIN_UPDATE_INTERVAL)
@@ -163,7 +190,8 @@ void EmotibitBluetooth::setUpdateInterval(uint32_t interval)
     updateIntervalChar.writeValue(bleUpdateInterval);
 }
 
-void EmotibitBluetooth::setRecordingSince(const String &recordingSince) {
+void EmotibitBluetooth::setRecordingSince(const String &recordingSince)
+{
     recordingChar.writeValue(recordingSince);
 }
 
@@ -190,18 +218,20 @@ int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer
         }
         // add null terminator
         buffer[bytesRead] = 0;
-        *packetType = BluetoothPacket::RECORDING;    
+        *packetType = BluetoothPacket::RECORDING;
         return bytesRead + 1;
     }
 
-    if (fileListChar.written()) {
+    if (fileListChar.written())
+    {
         fileListChar.readValue(buffer, 1);
 
         *packetType = BluetoothPacket::FILE_LIST;
         return 1;
     }
 
-    if (fileTransferChar.written()) {
+    if (fileTransferChar.written())
+    {
         int dataLength = fileTransferChar.valueLength();
         int bytesRead = fileTransferChar.readValue(buffer, dataLength);
 
@@ -216,10 +246,11 @@ int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer
         return bytesRead + 1;
     }
 
-    if (fileDeleteChar.written()) {
+    if (fileDeleteChar.written())
+    {
         int dataLength = fileDeleteChar.valueLength();
         int bytesRead = fileDeleteChar.readValue(buffer, dataLength);
-        
+
         if (bytesRead != dataLength)
         {
             Serial.printf("Only read %u out of %u bytes", bytesRead, dataLength);
@@ -234,15 +265,18 @@ int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer
     return 0;
 }
 
-void EmotibitBluetooth::transferFile(File & file) {
+void EmotibitBluetooth::transferFile(File &file)
+{
     uint32_t fileSize = file.size();
     char buffer[packetSize + 1];
     int packetCount = calculatePacketCount(fileSize);
 
     sendPacketCountControlPacket(packetCount);
-    for (int i = 0; i < packetCount; i++) {
+    for (int i = 0; i < packetCount; i++)
+    {
         memset(buffer, 0, (packetSize + 1) * sizeof(char));
-        if (dataTransferCancelReceived()) {
+        if (dataTransferCancelReceived())
+        {
             Serial.println("Cancelling data transfer");
             file.close();
             break;
@@ -259,41 +293,54 @@ void EmotibitBluetooth::transferFile(File & file) {
     file.close();
 }
 
-void EmotibitBluetooth::transferData(const String &fileData) {
+void EmotibitBluetooth::transferData(const String &fileData)
+{
     int packetCount = calculatePacketCount(fileData.length());
     sendPacketCountControlPacket(packetCount);
     sendPackets(fileData);
     sendDataTransferCompletePacket();
 }
 
-int EmotibitBluetooth::calculatePacketCount(int dataLength) {
+int EmotibitBluetooth::calculatePacketCount(int dataLength)
+{
     return ceil(1.0f * dataLength / packetSize);
 }
 
-void EmotibitBluetooth::sendPacketCountControlPacket(int packetCount) {
+void EmotibitBluetooth::sendPacketCountControlPacket(int packetCount)
+{
     std::string packetCountMessage = "packetCount=" + std::to_string(packetCount);
     dataTransferChar.writeValue(packetCountMessage.c_str());
 }
 
-void EmotibitBluetooth::sendDataTransferCompletePacket() {
+void EmotibitBluetooth::sendDataTransferCompletePacket()
+{
     dataTransferChar.writeValue(BLE_DATA_TRANSFER_INACTIVE);
 }
 
-void EmotibitBluetooth::sendPackets(const String &data) {
+void EmotibitBluetooth::sendPackets(const String &data)
+{
     int packetCount = calculatePacketCount(data.length());
-    for(int packet = 0; packet < packetCount; packet++) {
-        if (dataTransferCancelReceived()) {
+    for (int packet = 0; packet < packetCount; packet++)
+    {
+        if (dataTransferCancelReceived())
+        {
             Serial.println("Cancelling data transfer");
             break;
         }
         String packetData = data.substring(packet * packetSize,
-            packet * packetSize + packetSize);
+                                           packet * packetSize + packetSize);
         dataTransferChar.writeValue(packetData);
     }
 }
 
-bool EmotibitBluetooth::dataTransferCancelReceived() {
-    if (dataTransferChar.written()) {
+bool EmotibitBluetooth::dataTransferCancelReceived()
+{
+    if (!BLE.connected())
+    {
+        return true;
+    }
+    if (dataTransferChar.written())
+    {
         uint8_t value;
         dataTransferChar.readValue(value);
         char stringValue[2];
