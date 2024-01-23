@@ -3666,7 +3666,8 @@ String EmotiBit::listSdCardFiles() {
 			if (files.length() > 0) {
 				files.concat("\n");
 			}
-			files.concat(entryName + ";" + entry.size());
+			std::string fileNameWithSize = std::string(entryName.c_str()) + ";" + std::to_string(entry.size());  
+			files.concat(fileNameWithSize.c_str());
 		}
 		
 		entry.close();
