@@ -37,7 +37,7 @@ uint64_t bleUpdateInterval = 3000;
 
 void EmotibitBluetooth::setup(const String &deviceName, const String &pairingCode)
 {
-    maxPacketSize = BLE_FILE_TRANSFER_PACKET_SIZE;
+    packetSize = BLE_FILE_TRANSFER_PACKET_SIZE;
     // ignore pairing code for now
 
     // begin initialization
@@ -236,20 +236,20 @@ int EmotibitBluetooth::retrieveData(BluetoothPacket *packetType, uint8_t *buffer
 
 void EmotibitBluetooth::transferFile(File & file) {
     uint32_t fileSize = file.size();
-    char buffer[maxPacketSize + 1];
+    char buffer[packetSize + 1];
     int packetCount = calculatePacketCount(fileSize);
 
     sendPacketCountControlPacket(packetCount);
     for (int i = 0; i < packetCount; i++) {
-        memset(buffer, 0, (maxPacketSize + 1) * sizeof(char));
+        memset(buffer, 0, (packetSize + 1) * sizeof(char));
         if (dataTransferCancelReceived()) {
             Serial.println("Cancelling data transfer");
             file.close();
             break;
         }
-        int filePosition = i * maxPacketSize;
+        int filePosition = i * packetSize;
         file.seek(filePosition);
-        int readSize = min(maxPacketSize, fileSize - filePosition);
+        int readSize = min(packetSize, fileSize - filePosition);
         file.readBytes(buffer, readSize);
         // add null terminator
         buffer[readSize] = 0;
@@ -267,7 +267,7 @@ void EmotibitBluetooth::transferData(const String &fileData) {
 }
 
 int EmotibitBluetooth::calculatePacketCount(int dataLength) {
-    return ceil(1.0f * dataLength / maxPacketSize);
+    return ceil(1.0f * dataLength / packetSize);
 }
 
 void EmotibitBluetooth::sendPacketCountControlPacket(int packetCount) {
@@ -286,8 +286,8 @@ void EmotibitBluetooth::sendPackets(const String &data) {
             Serial.println("Cancelling data transfer");
             break;
         }
-        String packetData = data.substring(packet * BLE_FILE_TRANSFER_PACKET_SIZE,
-            packet * BLE_FILE_TRANSFER_PACKET_SIZE + BLE_FILE_TRANSFER_PACKET_SIZE);
+        String packetData = data.substring(packet * packetSize,
+            packet * packetSize + packetSize);
         dataTransferChar.writeValue(packetData);
     }
 }

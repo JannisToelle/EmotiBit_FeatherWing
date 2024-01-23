@@ -19,7 +19,7 @@ class EmotibitBluetooth
 private:
     uint8_t batteryPercentage;
     uint8_t heartRate;
-    uint32_t maxPacketSize;
+    uint32_t packetSize;
     int calculatePacketCount(int dataLength);
     void sendPacketCountControlPacket(int packetCount);
     void sendDataTransferCompletePacket();
