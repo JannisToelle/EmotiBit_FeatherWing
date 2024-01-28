@@ -1275,7 +1275,10 @@ bool EmotiBit::setupSdCard()
 
 bool EmotiBit::addPacket(uint32_t timestamp, const String typeTag, float * data, size_t dataLen, uint8_t precision, bool printToSerial)
 {
-	if (!typeTag.equals(EmotiBitPacket::TypeTag::HEART_RATE) && !typeTag.equals(EmotiBitPacket::TypeTag::SPO2)) {
+	if (!typeTag.equals(EmotiBitPacket::TypeTag::HEART_RATE) && !typeTag.equals(EmotiBitPacket::TypeTag::SPO2)
+		&& !typeTag.equals(EmotiBitPacket::TypeTag::ACCELEROMETER_X) && !typeTag.equals(EmotiBitPacket::TypeTag::ACCELEROMETER_Y)
+		&& !typeTag.equals(EmotiBitPacket::TypeTag::ACCELEROMETER_Z) && !typeTag.equals(EmotiBitPacket::TypeTag::INTER_BEAT_INTERVAL)
+	) {
 		return false;
 	}
 	static EmotiBitPacket::Header header;
@@ -1557,6 +1560,7 @@ void EmotiBit::parseBLEControlPackets() {
 			{
 				char* fileName = (char*)blePacketData;
 				Serial.println(fileName);
+				deleteFile(fileName);
 				break;
 			}
 		}
@@ -3679,6 +3683,10 @@ String EmotiBit::listSdCardFiles() {
 
 File EmotiBit::readFile(const String &fileName) {
 	return SD.open("/" + fileName);
+}
+
+void EmotiBit::deleteFile(const String &fileName){
+	SD.remove("/" + fileName);
 }
 
 bool EmotiBit::writeSdCardMessage(const String & s) {

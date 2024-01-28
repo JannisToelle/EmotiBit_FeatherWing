@@ -445,6 +445,7 @@ public:
 	void setPowerMode(PowerMode mode);
 	String listSdCardFiles();
 	File readFile(const String &fileName);
+	void deleteFile(const String &fileName);
 	bool writeSdCardMessage(const String &s);
 	int freeMemory();
 	bool loadConfigFile(const String &filename);
