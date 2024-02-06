@@ -119,12 +119,12 @@ void EmotibitBluetooth::initServices()
 
 void EmotibitBluetooth::updateBatteryLevel(float batteryLevel)
 {
-    batteryPercentage = (uint8_t)batteryLevel;
+    this->batteryPercentage = (uint8_t)batteryLevel;
 }
 
 void EmotibitBluetooth::updateHeartRate(float heartRate)
 {
-    heartRate = (uint8_t)heartRate;
+    this->heartRate = (uint8_t)heartRate;
 }
 
 void EmotibitBluetooth::sendData()
